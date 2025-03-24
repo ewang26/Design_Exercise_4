@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+package chat;
+
+service ChatService {
+  // Account management
+  rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse) {}
+  rpc Login(LoginRequest) returns (LoginResponse) {}
+  rpc Logout(LogoutRequest) returns (LogoutResponse) {}
+  rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse) {}
+  
+  // User listing
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse) {}
+  
+  // Messaging
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse) {}
+  rpc GetNumberOfUnreadMessages(GetNumberOfUnreadMessagesRequest) returns (GetNumberOfUnreadMessagesResponse) {}
+  rpc GetNumberOfReadMessages(GetNumberOfReadMessagesRequest) returns (GetNumberOfReadMessagesResponse) {}
+  rpc PopUnreadMessages(PopUnreadMessagesRequest) returns (PopUnreadMessagesResponse) {}
+  rpc GetReadMessages(GetReadMessagesRequest) returns (GetReadMessagesResponse) {}
+  rpc DeleteMessages(DeleteMessagesRequest) returns (DeleteMessagesResponse) {}
+  
+  // Message streaming
+  rpc SubscribeToMessages(SubscribeRequest) returns (stream MessageNotification) {}
+}
+
+message CreateAccountRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message CreateAccountResponse {
+  optional string error = 1;
+}
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  optional string error = 1;
+}
+
+message LogoutRequest {}
+
+message LogoutResponse {}
+
+message DeleteAccountRequest {}
+
+message DeleteAccountResponse {}
+
+message ListUsersRequest {
+  string pattern = 1;
+  int32 offset = 2;
+  int32 limit = 3;
+}
+
+message ListUsersResponse {
+  repeated string usernames = 1;
+}
+
+message SendMessageRequest {
+  string receiver = 1;
+  string content = 2;
+}
+
+message SendMessageResponse {}
+
+message Message {
+  int32 id = 1;
+  string sender = 2;
+  string content = 3;
+}
+
+message GetNumberOfUnreadMessagesRequest {}
+
+message GetNumberOfUnreadMessagesResponse {
+  int32 count = 1;
+}
+
+message GetNumberOfReadMessagesRequest {}
+
+message GetNumberOfReadMessagesResponse {
+  int32 count = 1;
+}
+
+message PopUnreadMessagesRequest {
+  int32 num_messages = 1;
+}
+
+message PopUnreadMessagesResponse {
+  repeated Message messages = 1;
+}
+
+message GetReadMessagesRequest {
+  int32 offset = 1;
+  int32 num_messages = 2;
+}
+
+message GetReadMessagesResponse {
+  repeated Message messages = 1;
+}
+
+message DeleteMessagesRequest {
+  repeated int32 message_ids = 1;
+}
+
+message DeleteMessagesResponse {}
+
+message SubscribeRequest {}
+
+message MessageNotification {
+  Message message = 1;
+} 
