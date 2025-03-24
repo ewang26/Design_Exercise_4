@@ -1,9 +1,8 @@
 {
   "host": "localhost",
   "port": 8888,
-  "use_custom_protocol": true,
   "server_data": "server_data.json",
-  "distributed_mode": false,
+  "distributed_mode": true,
   "peers": {
     "node1": "localhost:9888",
     "node2": "localhost:9889",
@@ -14,4 +13,4 @@
     "localhost:8889", 
     "localhost:8890"
   ]
-}
+} 
