@@ -1,5 +1,7 @@
 import grpc
 import threading
+import random
+import time
 from typing import Any, List, Optional
 from ..common.config import ConnectionSettings
 from ..proto import chat_pb2, chat_pb2_grpc
@@ -9,8 +11,14 @@ class ChatClient:
     def __init__(self, config: ConnectionSettings = ConnectionSettings()):
         self.host = config.host
         self.port = config.port
+        self.server_addresses = config.server_addresses or [f"{self.host}:{self.port}"]
+        self.current_server_index = 0
         self.channel = None
         self.stub = None
+        self.reconnect_timeout = 1.0  # Initial reconnect timeout (will increase exponentially)
+        self.max_reconnect_timeout = 30.0  # Maximum reconnect timeout
+        self.message_thread = None
+        self.shutdown_flag = threading.Event()
 
         self.gui = ChatGUI(
             on_login=self.login,
@@ -25,28 +33,96 @@ class ChatClient:
         )
 
     def connect(self) -> bool:
-        """Connect to the server."""
-        try:
-            self.channel = grpc.insecure_channel(f'{self.host}:{self.port}')
-            self.stub = chat_pb2_grpc.ChatServiceStub(self.channel)
+        """Connect to a server, trying each one until successful."""
+        # Close existing channel if any
+        if self.channel:
+            self.channel.close()
+            self.channel = None
+            self.stub = None
+        
+        # Try each server in the list
+        for i in range(len(self.server_addresses)):
+            server_addr = self.server_addresses[(self.current_server_index + i) % len(self.server_addresses)]
+            try:
+                self.gui.display_message(f"Connecting to server at {server_addr}...")
+                self.channel = grpc.insecure_channel(server_addr)
+                self.stub = chat_pb2_grpc.ChatServiceStub(self.channel)
+                
+                # Test connection with a simple request
+                # We use the ListUsers endpoint with a simple query to verify connection
+                self.stub.ListUsers(
+                    chat_pb2.ListUsersRequest(pattern="", offset=0, limit=1),
+                    timeout=2.0
+                )
+                
+                # Connection successful, update current server index
+                self.current_server_index = (self.current_server_index + i) % len(self.server_addresses)
+                self.gui.display_message(f"Connected to server at {server_addr}")
+                
+                # Start message subscription thread
+                if self.message_thread and self.message_thread.is_alive():
+                    self.shutdown_flag.set()  # Signal existing thread to shut down
+                    self.message_thread.join(1.0)  # Wait for it to complete
+                
+                self.shutdown_flag.clear()
+                self.message_thread = threading.Thread(target=self._receive_messages)
+                self.message_thread.daemon = True
+                self.message_thread.start()
+                
+                # Reset reconnect timeout on successful connection
+                self.reconnect_timeout = 1.0
+                return True
+                
+            except Exception as e:
+                self.gui.display_message(f"Connection to {server_addr} failed: {e}")
+        
+        self.gui.display_message("Failed to connect to any server. Will retry...")
+        return False
 
-            # Start message subscription thread
-            thread = threading.Thread(target=self._receive_messages)
-            thread.daemon = True
-            thread.start()
+    def _try_reconnect(self):
+        """Try to reconnect to a server with exponential backoff."""
+        self.gui.display_message(f"Connection lost. Trying to reconnect in {self.reconnect_timeout:.1f} seconds...")
+        time.sleep(self.reconnect_timeout)
+        
+        # Exponential backoff
+        self.reconnect_timeout = min(self.reconnect_timeout * 2, self.max_reconnect_timeout)
+        
+        if self.connect():
+            self.gui.display_message("Reconnected to server")
             return True
-        except Exception as e:
-            self.gui.display_message(f"Connection failed: {e}")
-            return False
+        return False
 
     def start(self):
         """Start the client."""
         if self.connect():
             self.gui.start()
+        else:
+            # If initial connection fails, start UI anyway but keep trying to connect
+            threading.Thread(target=self._background_reconnect).start()
+            self.gui.start()
+    
+    def _background_reconnect(self):
+        """Background thread that keeps trying to reconnect until successful."""
+        while not self.shutdown_flag.is_set():
+            if self._try_reconnect():
+                break
+        
+    def _handle_rpc_error(self, method_name, e):
+        """Handle RPC errors, attempting reconnection for certain failure types."""
+        if e.code() in [grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED]:
+            self.gui.display_message(f"Server connection error: {e.details()}")
+            # Start a background thread to reconnect
+            threading.Thread(target=self._background_reconnect).start()
+        else:
+            self.gui.display_message(f"Error in {method_name}: {e.details()}")
 
     def create_account(self, username: str, password: str):
         """Send create account request."""
         try:
+            if not self.stub:
+                self.gui.display_message("Not connected to server")
+                return
+                
             response = self.stub.CreateAccount(
                 chat_pb2.CreateAccountRequest(username=username, password=password)
             )
@@ -55,11 +131,15 @@ class ChatClient:
             else:
                 self.gui.display_message("Account created successfully, please log in")
         except grpc.RpcError as e:
-            self.gui.display_message(f"Failed to create account: {e.details()}")
+            self._handle_rpc_error("create_account", e)
 
     def login(self, username: str, password: str):
         """Send login request."""
         try:
+            if not self.stub:
+                self.gui.display_message("Not connected to server")
+                return
+                
             response = self.stub.Login(
                 chat_pb2.LoginRequest(username=username, password=password)
             )
@@ -69,11 +149,15 @@ class ChatClient:
                 self.gui.show_main_widgets()
                 self._send_initial_requests()
         except grpc.RpcError as e:
-            self.gui.display_message(f"Failed to login: {e.details()}")
+            self._handle_rpc_error("login", e)
 
     def _send_initial_requests(self):
         """Send initial requests after login."""
         try:
+            if not self.stub:
+                self.gui.display_message("Not connected to server")
+                return
+                
             # Call asynchronously since they don't block each other
             unread = self.stub.GetNumberOfUnreadMessages.future(
                 chat_pb2.GetNumberOfUnreadMessagesRequest()
@@ -85,18 +169,30 @@ class ChatClient:
             self.gui.update_read_count(read.result().count)
             self.gui.update_messages_view()
         except grpc.RpcError as e:
-            self.gui.display_message(f"Failed to get message counts: {e.details()}")
+            self._handle_rpc_error("_send_initial_requests", e)
 
     def logout(self):
         """Send logout request."""
         try:
+            if not self.stub:
+                self.gui.display_message("Not connected to server")
+                return
+                
             self.stub.Logout(chat_pb2.LogoutRequest())
+            # Even if logout fails, return to login screen
+            self.gui.show_login_widgets()
         except grpc.RpcError as e:
-            self.gui.display_message(f"Failed to logout: {e.details()}")
+            self._handle_rpc_error("logout", e)
+            # Still return to login screen
+            self.gui.show_login_widgets()
 
     def list_accounts(self, pattern: str, offset: int, limit: int):
         """Send list accounts request."""
         try:
+            if not self.stub:
+                self.gui.display_message("Not connected to server")
+                return
+                
             response = self.stub.ListUsers(
                 chat_pb2.ListUsersRequest(
                     pattern=pattern,
@@ -106,34 +202,47 @@ class ChatClient:
             )
             self.gui.display_users(response.usernames)
         except grpc.RpcError as e:
-            self.gui.display_message(f"Failed to list accounts: {e.details()}")
+            self._handle_rpc_error("list_accounts", e)
 
     def send_message(self, recipient_username: str, content: str):
         """Send a message to another user."""
         try:
+            if not self.stub:
+                self.gui.display_message("Not connected to server")
+                return
+                
             self.stub.SendMessage(
                 chat_pb2.SendMessageRequest(
                     receiver=recipient_username,
                     content=content
                 )
             )
+            self.gui.display_message(f"Message sent to {recipient_username}")
         except grpc.RpcError as e:
-            self.gui.display_message(f"Failed to send message: {e.details()}")
+            self._handle_rpc_error("send_message", e)
 
     def pop_unread_messages(self, count: int):
         """Pop unread messages."""
         try:
+            if not self.stub:
+                self.gui.display_message("Not connected to server")
+                return
+                
             response = self.stub.PopUnreadMessages(
                 chat_pb2.PopUnreadMessagesRequest(num_messages=count)
             )
             self.gui.display_messages(response.messages)
             self._send_initial_requests()
         except grpc.RpcError as e:
-            self.gui.display_message(f"Failed to pop messages: {e.details()}")
+            self._handle_rpc_error("pop_unread_messages", e)
 
     def get_read_messages(self, offset: int, limit: int):
         """Get read messages."""
         try:
+            if not self.stub:
+                self.gui.display_message("Not connected to server")
+                return
+                
             response = self.stub.GetReadMessages(
                 chat_pb2.GetReadMessagesRequest(
                     offset=offset,
@@ -142,37 +251,63 @@ class ChatClient:
             )
             self.gui.display_messages(response.messages)
         except grpc.RpcError as e:
-            self.gui.display_message(f"Failed to get messages: {e.details()}")
+            self._handle_rpc_error("get_read_messages", e)
 
     def delete_messages(self, message_ids: List[int]):
         """Delete messages."""
         try:
+            if not self.stub:
+                self.gui.display_message("Not connected to server")
+                return
+                
             self.stub.DeleteMessages(
                 chat_pb2.DeleteMessagesRequest(message_ids=message_ids)
             )
             self._send_initial_requests()
             self.gui.update_messages_view()
         except grpc.RpcError as e:
-            self.gui.display_message(f"Failed to delete messages: {e.details()}")
+            self._handle_rpc_error("delete_messages", e)
 
     def delete_account(self):
         """Delete account."""
         try:
+            if not self.stub:
+                self.gui.display_message("Not connected to server")
+                return
+                
             self.stub.DeleteAccount(chat_pb2.DeleteAccountRequest())
+            self.gui.show_login_widgets()
+            self.gui.display_message("Account deleted successfully")
         except grpc.RpcError as e:
-            self.gui.display_message(f"Failed to delete account: {e.details()}")
+            self._handle_rpc_error("delete_account", e)
 
     def _receive_messages(self):
         """Receive messages from the server."""
-        while True:
+        while not self.shutdown_flag.is_set():
             try:
+                if not self.stub:
+                    time.sleep(1)
+                    continue
+                    
                 for notification in self.stub.SubscribeToMessages(chat_pb2.SubscribeRequest()):
+                    if self.shutdown_flag.is_set():
+                        break
+                        
                     msg = notification.message
                     self.gui.display_message(f"New message from {msg.sender}")
                     self._send_initial_requests()
                     self.gui.update_messages_view()
+                
+                # If we get here, the stream ended normally
+                if not self.shutdown_flag.is_set():
+                    # Try to reconnect in the background
+                    threading.Thread(target=self._background_reconnect).start()
+                    
             except grpc.RpcError as e:
-                if e.code() == grpc.StatusCode.CANCELLED:
+                if e.code() == grpc.StatusCode.CANCELLED or self.shutdown_flag.is_set():
                     break
-                self.gui.display_message(f"Connection error: {e.details()}")
-                break
+                
+                # Try to reconnect
+                if not self.shutdown_flag.is_set():
+                    threading.Thread(target=self._background_reconnect).start()
+                    break
