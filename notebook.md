@@ -1,5 +1,16 @@
 # Engineering Notebook
 
+## Adding replication to the chat system
+
+- Current thoughts for replication:
+    - Use leader-follower replication model
+    - Have a config file that specifies the IP addresses of the servers, use their ordering in the file to determine order of priority
+    - Client automatically connects to the leader, if the leader fails, the client tries the next server in the list
+    - Servers should have a gRPC heartbeat service that followers use to check if the leader is still alive
+    - Since servers use the same data file, they also agree on who should be the next leader
+    - Finally, if the leader comes back online, current leader should be able to signal to the client to reconnect to the leader
+    - We need some way to sync the state between the servers when a new one starts up. We do this by having a `timestamp` field on the state snapshot that is updated every time the state is updated. When a server connects to the leader, it sends its current state. The leader updates its state if its newer, and sends the updated state to **all connected servers**.
+
 ## Updating chat application to use gRPC
 
 ### 2/25/25
