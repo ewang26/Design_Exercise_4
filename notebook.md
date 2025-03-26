@@ -2,6 +2,25 @@
 
 ## Adding replication to the chat system
 
+- Generate necessary gRPC files via:
+
+```
+python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. chat_system/proto/chat.proto
+python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. chat_system/proto/raft.proto
+python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. chat_system/proto/server.proto
+```
+
+- Run server cluster via 
+```
+python -m chat_system.scripts.run_cluster
+```
+
+Run client via
+```
+python -m chat_system.scripts.run_cluster
+```
+
+
 - Finally got a replicated system working, where each server pings the leader to check if it's still alive. If the leader fails, the server moves on to the next leader in the order. If a leader comes back online, they will signal to the other clients to reconnect to them. Things to do now:
   - Create methods in `server.py` to mirror the remaining gRPC services in `server.proto`
   - Use these methods in the server to handle the gRPC requests, so they will be automatically replicated to the other clients
