@@ -9,10 +9,10 @@ service SyncService {
   rpc SyncAddUser(SyncAddUserRequest) returns (Empty) {}
   rpc SyncDeleteUser(SyncDeleteUserRequest) returns (Empty) {}
 
-  rpc SyncAddUnreadMessages(SyncMessageList) returns (Empty) {}
-  rpc SyncRemoveUnreadMessages(SyncMessageList) returns (Empty) {}
-  rpc SyncAddReadMessages(SyncMessageList) returns (Empty) {}
-  rpc SyncRemoveReadMessages(SyncMessageList) returns (Empty) {}
+  rpc SyncAddUnreadMessage(SyncAddMessage) returns (Empty) {}
+  rpc SyncRemoveUnreadMessage(SyncAddMessage) returns (Empty) {}
+  rpc SyncAddReadMessage(SyncRemoveMessage) returns (Empty) {}
+  rpc SyncRemoveReadMessage(SyncRemoveMessage) returns (Empty) {}
 }
 
 message Empty {}
@@ -20,7 +20,6 @@ message Empty {}
 message Message {
   int32 id = 1;
   string sender = 2;
-  string receiver = 3;
   string message = 4;
 }
 
@@ -31,14 +30,21 @@ message Leader {
 message SyncAddUserRequest {
   string username = 1;
   string password = 2;
+  string salt = 3;
 }
 
 message SyncDeleteUserRequest {
   string username = 1;
 }
 
-message SyncMessageList {
-  repeated Message messages = 1;
+message SyncAddMessage {
+  string user = 1;
+  Message message = 2;
+}
+
+message SyncRemoveMessage {
+  string user = 1;
+  int32 message_id = 2;
 }
 
 
