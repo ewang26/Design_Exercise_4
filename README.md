@@ -27,7 +27,7 @@ The `server_id` is a 0-indexed integer that represents the server's ID in the di
 
 The client can be started with
 ```bash
-python -m chat_system.client
+python -m chat_system.client <distributed_config.json>
 ```
 
 ### Tests
