@@ -1,0 +1,22 @@
+{
+  "servers": [
+    {
+      "host": "localhost",
+      "raft_port": 50051,
+      "chat_port": 50052
+    },
+    {
+      "host": "localhost",
+      "raft_port": 50053,
+      "chat_port": 50054
+    },
+    {
+      "host": "localhost",
+      "raft_port": 50055,
+      "chat_port": 50056
+    }
+  ],
+  "election_timeout_min": 0.5,
+  "election_timeout_max": 1.0,
+  "heartbeat_interval": 0.1
+} 

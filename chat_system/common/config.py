@@ -1,5 +1,6 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 DEFAULT_HOST = 'localhost'
 DEFAULT_PORT = 8888
@@ -12,6 +13,8 @@ class ConnectionSettings:
     port: int = DEFAULT_PORT
     use_custom_protocol: bool = DEFAULT_USE_CUSTOM_PROTOCOL
     server_data_path: str = DEFAULT_SERVER_DATA_PATH
+    servers: List[str] = field(default_factory=list)  # Using default_factory instead of []
+    gui = None               # Reference to the GUI
 
 def load_config(config_path: str = "config.json") -> ConnectionSettings:
     """Load connection settings from config file."""
@@ -23,7 +26,9 @@ def load_config(config_path: str = "config.json") -> ConnectionSettings:
                 host=d.get("host", DEFAULT_HOST),
                 port=d.get("port", DEFAULT_PORT),
                 use_custom_protocol=d.get("use_custom_protocol", DEFAULT_USE_CUSTOM_PROTOCOL),
-                server_data_path=d.get("server_data_path", DEFAULT_SERVER_DATA_PATH)
+                server_data_path=d.get("server_data_path", DEFAULT_SERVER_DATA_PATH),
+                servers=d.get("servers", []),
+                gui=d.get("gui")
             )
     except FileNotFoundError:
         print("Config file not found, using default settings")
