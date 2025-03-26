@@ -4,22 +4,29 @@ import re
 from ..common.security import Security
 from ..common.user import User, Message
 
-class AccountManager:
+class ServerState:
     def __init__(self):
         self.accounts: Dict[str, User] = {}  # username -> User
         self.login_info: Dict[str, Tuple[bytes, bytes]] = {}  # username -> (password hash, salt)
+        self.next_message_id = 0
+        self.timestamp = 0
 
     def get_state(self):
         """Save the account manager state to a file."""
-        state = {}
+        state = {
+            "next_message_id": self.next_message_id,
+            "timestamp": self.timestamp,
+        }
+        users = {}
         for user_id, user in self.accounts.items():
             password_hash, salt = self.login_info[user_id]
-            state[user_id] = {
+            users[user_id] = {
                 "password_hash": base64.b64encode(password_hash).decode('ascii'),
                 "salt": base64.b64encode(salt).decode('ascii'),
                 "message_queue": [(m.id, m.sender, m.content) for m in user.message_queue],
                 "read_mailbox": [(m.id, m.sender, m.content) for m in user.read_mailbox]
             }
+        state["users"] = users
         return state
 
     def load_state(self, state: Dict):
@@ -27,7 +34,11 @@ class AccountManager:
         self.accounts.clear()
         self.login_info.clear()
 
-        for username, user_state in state.items():
+        self.next_message_id = state["next_message_id"]
+        self.timestamp = state["timestamp"]
+
+        users = state["users"]
+        for username, user_state in users.items():
             password_hash = base64.b64decode(user_state["password_hash"].encode('ascii'))
             salt = base64.b64decode(user_state["salt"].encode('ascii'))
             messages = [Message(*m) for m in user_state["message_queue"]]
