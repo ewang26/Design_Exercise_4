@@ -2,6 +2,8 @@
 
 ## Adding replication to the chat system
 
+- Created methods and added replication of client updates without much issue. I did discover that password hashes are not deterministic when being replicated, so I extended the proto to pass the password hash and salt.
+
 - Finally got a replicated system working, where each server pings the leader to check if it's still alive. If the leader fails, the server moves on to the next leader in the order. If a leader comes back online, they will signal to the other clients to reconnect to them. Things to do now:
   - Create methods in `server.py` to mirror the remaining gRPC services in `server.proto`
   - Use these methods in the server to handle the gRPC requests, so they will be automatically replicated to the other clients

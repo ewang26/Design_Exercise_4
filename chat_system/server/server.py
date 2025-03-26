@@ -1,13 +1,12 @@
+import base64
 import time
 
 import grpc
 from concurrent import futures
-import signal
 import json
 import threading
 from typing import Dict, Optional
 
-from chat_system.common.config import ConnectionSettings
 from .server_state import ServerState
 from ..common.distributed import DistributedConfig
 from ..common.user import Message
@@ -27,7 +26,35 @@ class SyncServicer(server_pb2_grpc.SyncServiceServicer):
             self.server.set_leader(request.leader)
         return server_pb2.Empty()
 
-    # TODO: Implement remaining methods
+    def SyncAddUser(self, request, context):
+        self.server.server_state.add_user(
+            request.username,
+            base64.b64decode(request.password.encode('ascii')),
+            base64.b64decode(request.salt.encode('ascii'))
+        )
+        return server_pb2.Empty()
+
+    def SyncDeleteUser(self, request, context):
+        self.server.server_state.delete_account(request.username)
+        return server_pb2.Empty()
+
+    def SyncAddUnreadMessage(self, request, context):
+        message = Message(request.message.id, request.message.sender, request.message.content)
+        self.server.server_state.add_unread_message(request.username, message)
+        return server_pb2.Empty()
+
+    def SyncAddReadMessage(self, request, context):
+        message = Message(request.message.id, request.message.sender, request.message.content)
+        self.server.server_state.add_read_message(request.username, message)
+        return server_pb2.Empty()
+
+    def SyncRemoveUnreadMessage(self, request, context):
+        self.server.server_state.remove_unread_message(request.username, request.message_id)
+        return server_pb2.Empty()
+
+    def SyncRemoveReadMessage(self, request, context):
+        self.server.server_state.remove_read_message(request.username, request.message_id)
+        return server_pb2.Empty()
 
 class ChatServicer(chat_pb2_grpc.ChatServiceServicer):
     def __init__(self, server):
@@ -87,8 +114,7 @@ class ChatServicer(chat_pb2_grpc.ChatServiceServicer):
         if self.server.server_state.get_user(recipient) is None:
             context.abort(grpc.StatusCode.NOT_FOUND, "Recipient not found")
 
-        message = Message(self.server.server_state.next_message_id, sender_id, request.content)
-        self.server.server_state.next_message_id += 1
+        message = Message(self.server.server_state.timestamp, sender_id, request.content)
 
         # Check if recipient is online. Do this atomically
         with self.server.sessions_lock:
@@ -99,11 +125,10 @@ class ChatServicer(chat_pb2_grpc.ChatServiceServicer):
                     break
 
             if online:
-                user = self.server.server_state.get_user(recipient)
-                user.add_read_message(message)
-                user.message_subscriber_queue.put(message)
+                self.server.server_state.add_read_message(recipient, message)
+                self.server.server_state.get_user(recipient).message_subscriber_queue.put(message)
             else:
-                self.server.account_manager.get_user(recipient).add_message(message)
+                self.server.server_state.add_unread_message(recipient, message)
 
         return chat_pb2.SendMessageResponse()
 
@@ -129,8 +154,7 @@ class ChatServicer(chat_pb2_grpc.ChatServiceServicer):
         with self.server.sessions_lock:
             username = self.server.client_sessions[context.peer()]
 
-        user = self.server.server_state.get_user(username)
-        messages = user.pop_unread_messages(request.num_messages)
+        messages = self.server.server_state.pop_unread_messages(username, request.num_messages)
         return chat_pb2.PopUnreadMessagesResponse(
             messages=[
                 chat_pb2.Message(id=m.id, sender=m.sender, content=m.content)
@@ -155,8 +179,8 @@ class ChatServicer(chat_pb2_grpc.ChatServiceServicer):
         with self.server.sessions_lock:
             username = self.server.client_sessions[context.peer()]
 
-        user = self.server.server_state.get_user(username)
-        user.delete_messages(request.message_ids)
+        for mid in request.message_ids:
+            self.server.server_state.remove_read_message(username, mid)
         return chat_pb2.DeleteMessagesResponse()
 
     def SubscribeToMessages(self, request, context):
@@ -187,7 +211,7 @@ class ChatServer:
         self.server_id = server_id
         self.host = config.servers[server_id].host
         self.port = config.servers[server_id].port
-        self.server_state = ServerState()
+        self.server_state = ServerState(self)
         self.client_sessions: Dict[str, Optional[str]] = {}  # peer -> username
 
         self.running = True
@@ -253,6 +277,19 @@ class ChatServer:
                     server["stub"].SetLeader(server_pb2.Leader(leader=server_id))
                 except grpc.RpcError:
                     print(f"Failed to set leader on server {i}")
+
+    def broadcast_server_update(self, method):
+        # Only broadcast if we're the leader
+        if self.server_id != self.leader:
+            return
+
+        for i, server in enumerate(self.servers):
+            if i == self.server_id:
+                continue
+            try:
+                method(server["stub"])
+            except grpc.RpcError:
+                print(f"Failed to broadcast to server {i}")
 
     def start(self):
         """Start the chat server."""

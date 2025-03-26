@@ -1,14 +1,14 @@
 import grpc
 import threading
 from typing import Any, List, Optional
-from ..common.config import ConnectionSettings
+from ..common.distributed import DistributedConfig
 from ..proto import chat_pb2, chat_pb2_grpc
 from .gui import ChatGUI
 
 class ChatClient:
-    def __init__(self, config: ConnectionSettings = ConnectionSettings()):
-        self.host = config.host
-        self.port = config.port
+    def __init__(self, config: DistributedConfig, server_id: int):
+        self.host = config.servers[server_id].host
+        self.port = config.servers[server_id].port
         self.channel = None
         self.stub = None
 

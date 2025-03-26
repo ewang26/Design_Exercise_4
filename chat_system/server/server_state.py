@@ -4,17 +4,19 @@ import re
 from ..common.security import Security
 from ..common.user import User, Message
 
+from ..proto import server_pb2, server_pb2_grpc
+
 class ServerState:
-    def __init__(self):
+    def __init__(self, server):
+        self.server = server
+
         self.accounts: Dict[str, User] = {}  # username -> User
         self.login_info: Dict[str, Tuple[bytes, bytes]] = {}  # username -> (password hash, salt)
-        self.next_message_id = 0
         self.timestamp = 0
 
     def get_state(self):
         """Save the account manager state to a file."""
         state = {
-            "next_message_id": self.next_message_id,
             "timestamp": self.timestamp,
         }
         users = {}
@@ -34,7 +36,6 @@ class ServerState:
         self.accounts.clear()
         self.login_info.clear()
 
-        self.next_message_id = state["next_message_id"]
         self.timestamp = state["timestamp"]
 
         users = state["users"]
@@ -63,15 +64,27 @@ class ServerState:
         if username in self.accounts:
             return "Username already taken"
 
-        # New user exists, create the account
-        new_user = User(username, [], [])
-
         # Store new user
         password_hash, salt = Security.hash_password(password)
-        self.login_info[username] = (password_hash, salt)
-        self.accounts[username] = new_user
+        self.add_user(username, password_hash, salt)
 
         return None
+
+    def add_user(self, username: str, password_hash: bytes, salt: bytes):
+        """Add a user to the server state."""
+        if username in self.accounts:
+            return
+        self.accounts[username] = User(username, [], [])
+        self.login_info[username] = (password_hash, salt)
+
+        self.timestamp += 1
+        self.server.broadcast_server_update(
+            lambda stub: stub.SyncAddUser(server_pb2.SyncAddUserRequest(
+                username=username,
+                password=base64.b64encode(password_hash).decode('ascii'),
+                salt=base64.b64encode(salt).decode('ascii')
+            ))
+        )
 
     def login(self, username: str, password: str) -> Optional[User]:
         """Attempt to log in. Return True if successful."""
@@ -93,5 +106,97 @@ class ServerState:
 
     def delete_account(self, user_id: str):
         """Delete an account."""
+        if user_id not in self.accounts:
+            return
+
         self.accounts.pop(user_id)
         self.login_info.pop(user_id)
+        self.timestamp += 1
+        self.server.broadcast_server_update(
+            lambda stub: stub.SyncDeleteUser(server_pb2.SyncDeleteUserRequest(username=user_id))
+        )
+
+    def add_unread_message(self, user_id: str, message: Message):
+        """Add messages to the user's message queue."""
+        if user_id not in self.accounts:
+            return
+
+        self.accounts[user_id]._add_unread_message(message)
+        self.timestamp += 1
+        self.server.broadcast_server_update(
+            lambda stub: stub.SyncAddUnreadMessage(server_pb2.SyncAddMessage(
+                user_id=user_id,
+                message=server_pb2.Message(
+                    id=message.id,
+                    sender=message.sender,
+                    content=message.content
+                )
+            ))
+        )
+
+    def add_read_message(self, user_id: str, message: Message):
+        """Add messages to the user's read mailbox."""
+        if user_id not in self.accounts:
+            return
+
+        self.accounts[user_id]._add_read_message(message)
+        self.timestamp += 1
+        self.server.broadcast_server_update(
+            lambda stub: stub.SyncAddReadMessage(server_pb2.SyncAddMessage(
+                user_id=user_id,
+                message=server_pb2.Message(
+                    id=message.id,
+                    sender=message.sender,
+                    content=message.content
+                )
+            ))
+        )
+
+    def remove_unread_message(self, user_id: str, message_id: int):
+        """Remove messages from the user's message queue."""
+        if user_id not in self.accounts:
+            return
+
+        for m in self.accounts[user_id].message_queue:
+            if m.id == message_id:
+                self.accounts[user_id].message_queue.remove(m)
+                break
+        self.timestamp += 1
+        self.server.broadcast_server_update(
+            lambda stub: stub.SyncRemoveUnreadMessage(server_pb2.SyncRemoveMessage(
+                user_id=user_id,
+                message_id=message_id
+            ))
+        )
+
+    def remove_read_message(self, user_id: str, message_id: int):
+        """Remove messages from the user's read mailbox."""
+        if user_id not in self.accounts:
+            return
+
+        for m in self.accounts[user_id].read_mailbox:
+            if m.id == message_id:
+                self.accounts[user_id].read_mailbox.remove(m)
+                break
+        self.timestamp += 1
+        self.server.broadcast_server_update(
+            lambda stub: stub.SyncRemoveReadMessage(server_pb2.SyncRemoveMessage(
+                user_id=user_id,
+                message_id=message_id
+            ))
+        )
+
+    def pop_unread_messages(self, user_id: str, num_messages: int) -> List[Message]:
+        if user_id not in self.accounts:
+            return []
+
+        user = self.accounts[user_id]
+        if num_messages < 0:
+            messages = user.message_queue.copy()
+        else:
+            num_messages = min(num_messages, len(user.message_queue))
+            messages = user.message_queue[:num_messages].copy()
+        for m in messages:
+            self.add_read_message(user_id, m)
+            self.remove_unread_message(user_id, m.id)
+        return messages
