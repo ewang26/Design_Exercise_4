@@ -20,8 +20,15 @@ class SyncServicer(server_pb2_grpc.SyncServiceServicer):
         print("Received ping from ", context.peer())
         return server_pb2.Empty()
 
+    def MergeState(self, request, context):
+        new_state = request.state
+        return server_pb2.ServerState(
+            state=json.dumps(self.server.merge_state(new_state))
+        )
+
     def SetLeader(self, request, context):
         # Only adopt this leader if it's higher priority (lower index) than our current leader
+        print("Received leader update from ", context.peer(), " of ", request.leader)
         if request.leader < self.server.leader:
             self.server.set_leader(request.leader)
         return server_pb2.Empty()
@@ -259,6 +266,25 @@ class ChatServer:
         except FileNotFoundError:
             print("No server state found, starting fresh")
 
+    def merge_state(self, new_state):
+        """
+        Merge the new state with the current state, if it has a larger timestamp.
+        Returns the new server state (merged or not).
+        """
+        state_json = json.loads(new_state)
+        print("Merging against remote state:",
+              self.server_state.timestamp, " vs. ", state_json["timestamp"])
+        if state_json["timestamp"] > self.server_state.timestamp:
+            self.server_state.load_state(state_json)
+
+            # If we're the leader, broadcast this state change to all other servers
+            if self.is_leader():
+                self.broadcast_server_update(
+                    lambda stub: stub.MergeState(server_pb2.ServerState(state=new_state))
+                )
+
+        return self.server_state.get_state()
+
     def connect_to_server(self, server_id):
         """Connect to another server."""
         host, port = self.servers[server_id]["host"], self.servers[server_id]["port"]
@@ -297,8 +323,18 @@ class ChatServer:
                     continue
                 try:
                     server["stub"].SetLeader(server_pb2.Leader(leader=server_id))
-                except grpc.RpcError:
-                    print(f"Failed to set leader on server {i}")
+                except grpc.RpcError as e:
+                    print(f"Failed to set leader on server {i}: {e.details()}")
+        else:
+            # Otherwise, send our state to the new leader
+            res = self.servers[self.leader]["stub"].MergeState(
+                server_pb2.ServerState(
+                    state=json.dumps(self.server_state.get_state())
+                )
+            )
+
+            # Merge the state we got back
+            self.merge_state(res.state)
 
     def broadcast_server_update(self, method):
         # Only broadcast if we're the leader
@@ -326,6 +362,8 @@ class ChatServer:
         server.add_insecure_port(f'{self.host}:{self.port}')
         server.start()
         print(f"Server started on {self.host}:{self.port}")
+
+        time.sleep(1)
 
         # Try connecting to other servers
         for server_id in range(len(self.servers)):

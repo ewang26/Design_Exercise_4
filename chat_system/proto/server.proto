@@ -5,6 +5,7 @@ package sync;
 service SyncService {
   rpc Health(Empty) returns (Empty) {}
   rpc SetLeader(Leader) returns (Empty) {}
+  rpc MergeState(ServerState) returns (ServerState) {}
 
   rpc SyncAddUser(SyncAddUserRequest) returns (Empty) {}
   rpc SyncDeleteUser(SyncDeleteUserRequest) returns (Empty) {}
@@ -16,6 +17,10 @@ service SyncService {
 }
 
 message Empty {}
+
+message ServerState {
+  string state = 1;
+}
 
 message Message {
   int32 id = 1;
