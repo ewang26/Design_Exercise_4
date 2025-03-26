@@ -2,6 +2,11 @@
 
 ## Adding replication to the chat system
 
+- Final working version:
+  - Merged the two server protos into one
+  - Got the client retry system working
+  - Got server replicas to send their state to the leader once they connect, so they can update their state if it's newer.
+
 - Generate necessary gRPC files via:
 
 ```
