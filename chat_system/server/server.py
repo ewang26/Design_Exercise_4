@@ -287,6 +287,9 @@ class ChatServer:
 
     def connect_to_server(self, server_id):
         """Connect to another server."""
+        if self.servers[server_id]["channel"] is not None:
+            self.servers[server_id]["channel"].close()
+
         host, port = self.servers[server_id]["host"], self.servers[server_id]["port"]
         channel = grpc.insecure_channel(f'{host}:{port}')
         stub = server_pb2_grpc.SyncServiceStub(channel)
@@ -318,14 +321,10 @@ class ChatServer:
         # If we're the new leader, broadcast it to all servers
         if server_id == self.server_id:
             # Broadcast the new leader to all servers
-            for i, server in enumerate(self.servers):
-                if i == server_id:
-                    continue
-                try:
-                    server["stub"].SetLeader(server_pb2.Leader(leader=server_id))
-                except grpc.RpcError as e:
-                    print(f"Failed to set leader on server {i}: {e.details()}")
+            self.broadcast_server_update(lambda stub: stub.SetLeader(server_pb2.Leader(leader=server_id)))
         else:
+            self.connect_to_server(self.leader)
+
             # Otherwise, send our state to the new leader
             res = self.servers[self.leader]["stub"].MergeState(
                 server_pb2.ServerState(
@@ -345,6 +344,7 @@ class ChatServer:
             if i == self.server_id:
                 continue
             try:
+                self.connect_to_server(self.leader)
                 method(server["stub"])
             except grpc.RpcError:
                 print(f"Failed to broadcast to server {i}")
