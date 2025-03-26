@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package sync;
+
+service SyncService {
+  rpc Health(Empty) returns (Empty) {}
+  rpc SetLeader(Leader) returns (Empty) {}
+
+  rpc SyncAddUser(SyncAddUserRequest) returns (Empty) {}
+  rpc SyncDeleteUser(SyncDeleteUserRequest) returns (Empty) {}
+
+  rpc SyncAddUnreadMessages(SyncMessageList) returns (Empty) {}
+  rpc SyncRemoveUnreadMessages(SyncMessageList) returns (Empty) {}
+  rpc SyncAddReadMessages(SyncMessageList) returns (Empty) {}
+  rpc SyncRemoveReadMessages(SyncMessageList) returns (Empty) {}
+}
+
+message Empty {}
+
+message Message {
+  int32 id = 1;
+  string sender = 2;
+  string receiver = 3;
+  string message = 4;
+}
+
+message Leader {
+  int32 leader = 1;
+}
+
+message SyncAddUserRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message SyncDeleteUserRequest {
+  string username = 1;
+}
+
+message SyncMessageList {
+  repeated Message messages = 1;
+}
+
+

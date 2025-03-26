@@ -1,3 +1,2 @@
-/chat_system/proto/chat_pb2.py
-/chat_system/proto/chat_pb2_grpc.py
+/chat_system/proto/*.py
 server_data.json

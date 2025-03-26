@@ -2,14 +2,23 @@
 
 ## Adding replication to the chat system
 
+- Finally got a replicated system working, where each server pings the leader to check if it's still alive. If the leader fails, the server moves on to the next leader in the order. If a leader comes back online, they will signal to the other clients to reconnect to them. Things to do now:
+  - Create methods in `server.py` to mirror the remaining gRPC services in `server.proto`
+  - Use these methods in the server to handle the gRPC requests, so they will be automatically replicated to the other clients
+  - Have the server send its state to the leader when it connects, so the leader can update its state if it's newer
+  - Have the servers tell the client to reconnect to the leader if the leader comes back online
+  - Have the client automatically switch to the next server in the list if the leader fails
+
+- Replication is hard, man...
+
 - Current thoughts for replication:
-    - Use leader-follower replication model
-    - Have a config file that specifies the IP addresses of the servers, use their ordering in the file to determine order of priority
-    - Client automatically connects to the leader, if the leader fails, the client tries the next server in the list
-    - Servers should have a gRPC heartbeat service that followers use to check if the leader is still alive
-    - Since servers use the same data file, they also agree on who should be the next leader
-    - Finally, if the leader comes back online, current leader should be able to signal to the client to reconnect to the leader
-    - We need some way to sync the state between the servers when a new one starts up. We do this by having a `timestamp` field on the state snapshot that is updated every time the state is updated. When a server connects to the leader, it sends its current state. The leader updates its state if its newer, and sends the updated state to **all connected servers**.
+  - Use leader-follower replication model
+  - Have a config file that specifies the IP addresses of the servers, use their ordering in the file to determine order of priority
+  - Client automatically connects to the leader, if the leader fails, the client tries the next server in the list
+  - Servers should have a gRPC heartbeat service that followers use to check if the leader is still alive
+  - Since servers use the same data file, they also agree on who should be the next leader
+  - Finally, if the leader comes back online, current leader should be able to signal to the client to reconnect to the leader
+  - We need some way to sync the state between the servers when a new one starts up. We do this by having a `timestamp` field on the state snapshot that is updated every time the state is updated. When a server connects to the leader, it sends its current state. The leader updates its state if its newer, and sends the updated state to **all connected servers**.
 
 ## Updating chat application to use gRPC
 

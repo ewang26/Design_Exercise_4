@@ -13,6 +13,7 @@ The server and client can be configured using the shared `config.json` file. Thi
 Generate the gRPC code from the proto file:
 ```bash
 python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. chat_system/proto/chat.proto
+python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. chat_system/proto/server.proto
 ```
 
 This will generate two files:
@@ -20,16 +21,13 @@ This will generate two files:
 
 Next, set up the configuration file in `config.json`. Once the configuration file is set up, the server can be started with
 ```bash
-python -m chat_system.server
+python -m chat_system.server <distributed_config.json> <server_id> <server_data.json>
 ```
-and the client can be started with
+The `server_id` is a 0-indexed integer that represents the server's ID in the distributed system list.
+
+The client can be started with
 ```bash
 python -m chat_system.client
-```
-
-You can optionally give an alternative path to a config file as a command line argument:
-```bash
-python -m chat_system.server path/to/config.json
 ```
 
 ### Tests
