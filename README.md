@@ -1,13 +1,9 @@
 # CS 2620 Client-Server Chat System
 
-This project is a simple client-server chat system. The general architecture is detailed in the [design document](design.md).
+This project is a simple client-server chat system. It implements replication using a leader-follower model.
 
 ### Configuration
-The server and client can be configured using the shared `config.json` file. This JSON file contains the following fields:
-- `host`: The host to bind the server to. Default is `localhost`.
-- `port`: The port to bind the server to. Default is `8888`.
-- `use_custom_protocol`: Whether to use the custom protocol or the JSON protocol. Default is `true`.
-- `server_data`: The path to the server data file. Default is `server_data.json`.
+The list of servers is detailed in `distributed_config.json`. This file contains a list of servers, each with an IP address and port number. These are the list of all servers in the distributed system; the client will connect to the first server in the list.
 
 ### Running
 Generate the gRPC code from the proto file:
@@ -16,14 +12,11 @@ python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. chat_system/p
 python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. chat_system/proto/server.proto
 ```
 
-This will generate two files:
-`chat_system/proto/chat_pb2.py` (message classes) and `chat_system/proto/chat_pb2_grpc.py` (service classes).
-
-Next, set up the configuration file in `config.json`. Once the configuration file is set up, the server can be started with
+Next, set up the configuration file in `distributed_config.json`. Once the configuration file is set up, the server can be started with
 ```bash
 python -m chat_system.server <distributed_config.json> <server_id> <server_data.json>
 ```
-The `server_id` is a 0-indexed integer that represents the server's ID in the distributed system list.
+The `server_id` is a 0-indexed integer that represents the server's ID in the distributed system list, while `server_data.json` is the path to the persistent storage for the server.
 
 The client can be started with
 ```bash
