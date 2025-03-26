@@ -1,0 +1,1 @@
+{"current_term": 84130, "voted_for": null, "log": [{"term": 1, "command": {"type": "add_user", "username": "test_user", "password": "test_password", "salt": "test_salt"}, "index": 0}], "commit_index": 0, "last_applied": 0}

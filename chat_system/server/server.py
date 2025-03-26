@@ -290,7 +290,6 @@ class ChatServer:
                 method(server["stub"])
             except grpc.RpcError:
                 print(f"Failed to broadcast to server {i}")
-
     def start(self):
         """Start the chat server."""
         server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
@@ -336,3 +335,4 @@ class ChatServer:
         self.running = False
         print(f"Saving server state to {self.server_path}")
         self.save_state_to_file()
+

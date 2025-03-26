@@ -1,2 +1,3 @@
 /chat_system/proto/*.py
 server_data.json
+*.pyc
