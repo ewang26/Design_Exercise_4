@@ -40,31 +40,40 @@ class SyncServicer(server_pb2_grpc.SyncServiceServicer):
 
     def SyncAddUnreadMessage(self, request, context):
         message = Message(request.message.id, request.message.sender, request.message.content)
-        self.server.server_state.add_unread_message(request.username, message)
+        self.server.server_state.add_unread_message(request.user, message)
         return server_pb2.Empty()
 
     def SyncAddReadMessage(self, request, context):
         message = Message(request.message.id, request.message.sender, request.message.content)
-        self.server.server_state.add_read_message(request.username, message)
+        self.server.server_state.add_read_message(request.user, message)
         return server_pb2.Empty()
 
     def SyncRemoveUnreadMessage(self, request, context):
-        self.server.server_state.remove_unread_message(request.username, request.message_id)
+        self.server.server_state.remove_unread_message(request.user, request.message_id)
         return server_pb2.Empty()
 
     def SyncRemoveReadMessage(self, request, context):
-        self.server.server_state.remove_read_message(request.username, request.message_id)
+        self.server.server_state.remove_read_message(request.user, request.message_id)
         return server_pb2.Empty()
 
 class ChatServicer(chat_pb2_grpc.ChatServiceServicer):
     def __init__(self, server):
         self.server = server
 
+    def _abort_if_not_leader(self, context):
+        if not self.server.is_leader():
+            context.abort(grpc.StatusCode.PERMISSION_DENIED, "Not leader")
+
+    def Health(self, request, context):
+        return chat_pb2.Empty()
+
     def CreateAccount(self, request, context):
+        self._abort_if_not_leader(context)
         error = self.server.server_state.create_account(request.username, request.password)
         return chat_pb2.CreateAccountResponse(error=error if error else None)
 
     def Login(self, request, context):
+        self._abort_if_not_leader(context)
         user = self.server.server_state.login(request.username, request.password)
         if user:
             with self.server.sessions_lock:
@@ -73,12 +82,14 @@ class ChatServicer(chat_pb2_grpc.ChatServiceServicer):
         return chat_pb2.LoginResponse(error="Invalid username or password")
 
     def Logout(self, request, context):
+        self._abort_if_not_leader(context)
         with self.server.sessions_lock:
             if context.peer() in self.server.client_sessions:
                 self.server.client_sessions[context.peer()] = None
         return chat_pb2.LogoutResponse()
 
     def ListUsers(self, request, context):
+        self._abort_if_not_leader(context)
         accounts = self.server.server_state.list_accounts(request.pattern)
         offset = max(0, request.offset)
         if request.limit == -1:
@@ -89,6 +100,7 @@ class ChatServicer(chat_pb2_grpc.ChatServiceServicer):
         return chat_pb2.ListUsersResponse(usernames=[user.name for user in accounts])
 
     def DeleteAccount(self, request, context):
+        self._abort_if_not_leader(context)
         with self.server.sessions_lock:
             peer = context.peer()
             if peer not in self.server.client_sessions:
@@ -104,6 +116,7 @@ class ChatServicer(chat_pb2_grpc.ChatServiceServicer):
         return chat_pb2.DeleteAccountResponse()
 
     def SendMessage(self, request, context):
+        self._abort_if_not_leader(context)
         with self.server.sessions_lock:
             sender_id = self.server.client_sessions.get(context.peer())
 
@@ -133,6 +146,7 @@ class ChatServicer(chat_pb2_grpc.ChatServiceServicer):
         return chat_pb2.SendMessageResponse()
 
     def GetNumberOfUnreadMessages(self, request, context):
+        self._abort_if_not_leader(context)
         with self.server.sessions_lock:
             username = self.server.client_sessions[context.peer()]
 
@@ -142,6 +156,7 @@ class ChatServicer(chat_pb2_grpc.ChatServiceServicer):
         )
 
     def GetNumberOfReadMessages(self, request, context):
+        self._abort_if_not_leader(context)
         with self.server.sessions_lock:
             username = self.server.client_sessions[context.peer()]
 
@@ -151,6 +166,7 @@ class ChatServicer(chat_pb2_grpc.ChatServiceServicer):
         )
 
     def PopUnreadMessages(self, request, context):
+        self._abort_if_not_leader(context)
         with self.server.sessions_lock:
             username = self.server.client_sessions[context.peer()]
 
@@ -163,6 +179,7 @@ class ChatServicer(chat_pb2_grpc.ChatServiceServicer):
         )
 
     def GetReadMessages(self, request, context):
+        self._abort_if_not_leader(context)
         with self.server.sessions_lock:
             username = self.server.client_sessions[context.peer()]
 
@@ -176,6 +193,7 @@ class ChatServicer(chat_pb2_grpc.ChatServiceServicer):
         )
 
     def DeleteMessages(self, request, context):
+        self._abort_if_not_leader(context)
         with self.server.sessions_lock:
             username = self.server.client_sessions[context.peer()]
 
@@ -184,6 +202,7 @@ class ChatServicer(chat_pb2_grpc.ChatServiceServicer):
         return chat_pb2.DeleteMessagesResponse()
 
     def SubscribeToMessages(self, request, context):
+        self._abort_if_not_leader(context)
         peer = context.peer()
 
         while context.is_active():
@@ -248,6 +267,9 @@ class ChatServer:
 
         self.servers[server_id]["stub"] = stub
         self.servers[server_id]["channel"] = channel
+
+    def is_leader(self):
+        return self.server_id == self.leader
 
     def ping_pong(self):
         while self.running:

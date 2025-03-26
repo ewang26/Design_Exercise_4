@@ -125,7 +125,7 @@ class ServerState:
         self.timestamp += 1
         self.server.broadcast_server_update(
             lambda stub: stub.SyncAddUnreadMessage(server_pb2.SyncAddMessage(
-                user_id=user_id,
+                user=user_id,
                 message=server_pb2.Message(
                     id=message.id,
                     sender=message.sender,
@@ -143,7 +143,7 @@ class ServerState:
         self.timestamp += 1
         self.server.broadcast_server_update(
             lambda stub: stub.SyncAddReadMessage(server_pb2.SyncAddMessage(
-                user_id=user_id,
+                user=user_id,
                 message=server_pb2.Message(
                     id=message.id,
                     sender=message.sender,
@@ -164,7 +164,7 @@ class ServerState:
         self.timestamp += 1
         self.server.broadcast_server_update(
             lambda stub: stub.SyncRemoveUnreadMessage(server_pb2.SyncRemoveMessage(
-                user_id=user_id,
+                user=user_id,
                 message_id=message_id
             ))
         )
@@ -181,7 +181,7 @@ class ServerState:
         self.timestamp += 1
         self.server.broadcast_server_update(
             lambda stub: stub.SyncRemoveReadMessage(server_pb2.SyncRemoveMessage(
-                user_id=user_id,
+                user=user_id,
                 message_id=message_id
             ))
         )

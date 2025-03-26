@@ -8,10 +8,10 @@ service ChatService {
   rpc Login(LoginRequest) returns (LoginResponse) {}
   rpc Logout(LogoutRequest) returns (LogoutResponse) {}
   rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse) {}
-  
+
   // User listing
   rpc ListUsers(ListUsersRequest) returns (ListUsersResponse) {}
-  
+
   // Messaging
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse) {}
   rpc GetNumberOfUnreadMessages(GetNumberOfUnreadMessagesRequest) returns (GetNumberOfUnreadMessagesResponse) {}
@@ -19,10 +19,15 @@ service ChatService {
   rpc PopUnreadMessages(PopUnreadMessagesRequest) returns (PopUnreadMessagesResponse) {}
   rpc GetReadMessages(GetReadMessagesRequest) returns (GetReadMessagesResponse) {}
   rpc DeleteMessages(DeleteMessagesRequest) returns (DeleteMessagesResponse) {}
-  
+
   // Message streaming
   rpc SubscribeToMessages(SubscribeRequest) returns (stream MessageNotification) {}
+
+  // Health check
+  rpc Health(Empty) returns (Empty) {}
 }
+
+message Empty {}
 
 message CreateAccountRequest {
   string username = 1;
@@ -112,4 +117,4 @@ message SubscribeRequest {}
 
 message MessageNotification {
   Message message = 1;
-} 
+}

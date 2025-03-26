@@ -1,10 +1,10 @@
 import unittest
-from chat_system.server.account_manager import AccountManager
+from chat_system.server.server_state import ServerState
 from chat_system.common.user import Message
 
 class TestAccountManager(unittest.TestCase):
     def setUp(self):
-        self.account_manager = AccountManager()
+        self.account_manager = ServerState()
 
     def test_create_account(self):
         """Test account creation."""
@@ -97,7 +97,7 @@ class TestAccountManager(unittest.TestCase):
         # Send messages in specific order
         messages = ["first", "second", "third"]
         for msg in messages:
-            receiver.add_message(Message(0, sender.name, msg))
+            receiver._add_unread_message(Message(0, sender.name, msg))
 
         # Check order in unread queue
         queue = receiver.message_queue
@@ -147,12 +147,12 @@ class TestAccountManager(unittest.TestCase):
         self.assertEqual(len(user.read_mailbox), 0)
 
         # Add and delete messages
-        user.add_read_message(Message(1, 0, "test"))
+        user._add_read_message(Message(1, 0, "test"))
         user.delete_messages([1])
         self.assertEqual(len(user.read_mailbox), 0)
 
         # Try deleting same message multiple times
-        user.add_read_message(Message(2, 0, "test"))
+        user._add_read_message(Message(2, 0, "test"))
         user.delete_messages([2, 2, 2])
         self.assertEqual(len(user.read_mailbox), 0)
 

@@ -20,7 +20,7 @@ message Empty {}
 message Message {
   int32 id = 1;
   string sender = 2;
-  string message = 4;
+  string content = 3;
 }
 
 message Leader {

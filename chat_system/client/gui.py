@@ -6,20 +6,23 @@ from chat_system.common.user import Message
 
 
 class ChatGUI:
-    def __init__(self, title, 
-                 on_logout=None, 
-                 on_create_account=None, 
-                 on_send_message=None, 
-                 on_list_accounts=None, 
-                 on_delete_messages=None, 
-                 on_delete_account=None, 
-                 get_read_messages=None, 
-                 on_pop_messages=None):
-        """
-        Initialize the GUI with callback functions.
-        These will be set later with the set_client method.
-        """
-        self.title = title
+    def __init__(self,
+                 on_login: Callable[[str, str], None],
+                 on_logout: Callable[[], None],
+                 on_create_account: Callable[[str, str], None],
+                 on_send_message: Callable[[str, str], None],
+                 on_list_accounts: Callable[[str, int, int], None],
+                 on_delete_messages: Callable[[List[int]], None],
+                 on_delete_account: Callable[[], None],
+                 get_read_messages: Callable[[int, int], None],
+                 on_pop_messages: Callable[[int], None]):
+
+        self.root = tk.Tk()
+        self.root.title("Chat Client")
+        self.root_frame = ttk.Frame(self.root)
+
+        # Store callbacks
+        self.on_login = on_login
         self.on_logout = on_logout
         self.on_create_account = on_create_account
         self.on_send_message = on_send_message
@@ -28,11 +31,6 @@ class ChatGUI:
         self.on_delete_account = on_delete_account
         self.get_read_messages = get_read_messages
         self.on_pop_messages = on_pop_messages
-        
-        # Initialize the main window and UI elements
-        self.root = tk.Tk()
-        self.root.title("Chat Client")
-        self.root_frame = ttk.Frame(self.root)
 
         # State variables
         self.current_page = 0
@@ -79,7 +77,7 @@ class ChatGUI:
         self.unread_label.pack(side=tk.LEFT, padx=5, pady=5)
 
         ttk.Button(self.unread_frame, text="Pop Messages",
-                  command=self._handle_pop_messages).pack(side=tk.RIGHT, padx=5, pady=5)
+                   command=self._handle_pop_messages).pack(side=tk.RIGHT, padx=5, pady=5)
         self.pop_count = ttk.Spinbox(self.unread_frame, from_=1, to=100, width=5)
         self.pop_count.pack(side=tk.RIGHT, padx=5, pady=5)
 
@@ -124,7 +122,7 @@ class ChatGUI:
         self.message_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
 
         ttk.Button(self.send_frame, text="Send",
-                  command=self._handle_send).pack(side=tk.RIGHT, padx=5)
+                   command=self._handle_send).pack(side=tk.RIGHT, padx=5)
 
         # User list frame
         self.user_frame = ttk.LabelFrame(self.root_frame, text="User List")
@@ -135,14 +133,14 @@ class ChatGUI:
         self.pattern_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
 
         ttk.Button(self.user_frame, text="Search",
-                  command=self._handle_list_users).pack(side=tk.RIGHT, padx=5)
+                   command=self._handle_list_users).pack(side=tk.RIGHT, padx=5)
 
         # Account management
         self.account_frame = ttk.Frame(self.root_frame)
         self.account_frame.pack(padx=10, pady=5, fill=tk.X)
 
         ttk.Button(self.account_frame, text="Delete Account",
-                  command=self._handle_delete_account).pack(side=tk.RIGHT, padx=5)
+                   command=self._handle_delete_account).pack(side=tk.RIGHT, padx=5)
         ttk.Button(self.account_frame, text="Logout",
                    command=self._handle_logout).pack(side=tk.RIGHT, padx=5)
 
@@ -252,21 +250,3 @@ class ChatGUI:
     def start(self):
         """Start the GUI main loop."""
         self.root.mainloop()
-
-    def set_client(self, client):
-        """Set the client and connect callback functions."""
-        self.client = client
-        
-        # Now set all the callback functions
-        self.on_logout = client.logout
-        self.on_create_account = client.create_account
-        self.on_send_message = client.send_message
-        self.on_list_accounts = client.list_users
-        self.on_delete_messages = client.delete_messages
-        self.on_delete_account = client.delete_account
-        self.get_read_messages = client.get_read_messages
-        self.on_pop_messages = client.pop_unread_messages
-        
-        # Update any UI elements that depend on these functions
-        # For example, enable buttons that were initially disabled
-        # ... (code to update UI elements)
