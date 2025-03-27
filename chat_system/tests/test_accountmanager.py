@@ -2,9 +2,20 @@ import unittest
 from chat_system.server.server_state import ServerState
 from chat_system.common.user import Message
 
+class MockServer:
+    def __init__(self):
+        self.id = "test_server"
+        self.host = "localhost"
+        self.port = 5000
+    
+    def broadcast_server_update(self, *args, **kwargs):
+        """Mock method for testing - does nothing"""
+        pass
+
 class TestAccountManager(unittest.TestCase):
     def setUp(self):
-        self.account_manager = ServerState()
+        mock_server = MockServer()
+        self.account_manager = ServerState(mock_server)
 
     def test_create_account(self):
         """Test account creation."""

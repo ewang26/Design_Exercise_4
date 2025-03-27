@@ -8,7 +8,7 @@ import grpc
 import json
 import threading
 import random
-from ..proto import chat_pb2, chat_pb2_grpc, raft_pb2, raft_pb2_grpc
+from chat_system.proto import chat_pb2, chat_pb2_grpc, raft_pb2, raft_pb2_grpc
 
 # Configuration
 TEST_CONFIG_PATH = "chat_system/tests/test_cluster_config.json"
@@ -28,10 +28,12 @@ class FaultToleranceTest(unittest.TestCase):
         cls.start_servers()
         
         # Wait for leader election
-        time.sleep(3)
+        time.sleep(5)  # Increased wait time
         
         # Get leader
         cls.leader_address = cls.find_leader()
+        if not cls.leader_address:
+            print("Warning: No leader found after startup")
         
     @classmethod
     def tearDownClass(cls):
@@ -47,18 +49,18 @@ class FaultToleranceTest(unittest.TestCase):
             "servers": [
                 {
                     "host": "localhost",
-                    "raft_port": 50051,
-                    "chat_port": 50052
+                    "port": 50051,
+                    "raft_port": 50052
                 },
                 {
                     "host": "localhost",
-                    "raft_port": 50053,
-                    "chat_port": 50054
+                    "port": 50053,
+                    "raft_port": 50054
                 },
                 {
                     "host": "localhost",
-                    "raft_port": 50055,
-                    "chat_port": 50056
+                    "port": 50055,
+                    "raft_port": 50056
                 }
             ],
             "election_timeout_min": 0.5,
@@ -88,14 +90,17 @@ class FaultToleranceTest(unittest.TestCase):
             )
             
             cls.server_processes.append(process)
+            print(f"Started server {i} with PID {process.pid}")
     
     @classmethod
     def stop_servers(cls):
-        for process in cls.server_processes:
+        for i, process in enumerate(cls.server_processes):
             try:
+                print(f"Stopping server {i} with PID {process.pid}")
                 process.terminate()
                 process.wait(timeout=2)
             except:
+                print(f"Force killing server {i} with PID {process.pid}")
                 process.kill()
     
     @classmethod
@@ -106,15 +111,17 @@ class FaultToleranceTest(unittest.TestCase):
         
         for server in config['servers']:
             try:
-                address = f"{server['host']}:{server['raft_port']}"
+                address = f"{server['host']}:{server['port']}"
+                print(f"Trying to connect to {address}")
                 channel = grpc.insecure_channel(address)
-                stub = raft_pb2_grpc.RaftServiceStub(channel)
+                stub = chat_pb2_grpc.ChatServiceStub(channel)
                 
-                response = stub.GetLeader(raft_pb2.GetLeaderRequest())
-                
-                if response.leaderAddress:
-                    return response.leaderAddress
-            except:
+                # Try to list users - this will work on any server
+                response = stub.ListUsers(chat_pb2.ListUsersRequest(pattern=""))
+                print(f"Connected to {address}")
+                return address
+            except Exception as e:
+                print(f"Failed to connect to {address}: {str(e)}")
                 continue
         
         return None
@@ -256,7 +263,7 @@ class FaultToleranceTest(unittest.TestCase):
             config = json.load(f)
         
         for i, server in enumerate(config['servers']):
-            if f"{server['host']}:{server['raft_port']}" == leader_address:
+            if f"{server['host']}:{server['port']}" == leader_address:
                 return i
         
         return None

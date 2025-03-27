@@ -36,3 +36,25 @@ class User:
             return self.read_mailbox[:n-offset]
         else:
             return self.read_mailbox[n-num_messages-offset:n-offset]
+
+    def delete_messages(self, message_ids: List[int]):
+        """Delete messages with the given IDs from both unread and read mailboxes."""
+        # Delete from unread messages
+        self.message_queue = [msg for msg in self.message_queue if msg.id not in message_ids]
+        # Delete from read messages
+        self.read_mailbox = [msg for msg in self.read_mailbox if msg.id not in message_ids]
+
+    def pop_unread_messages(self, num_messages: int) -> List[Message]:
+        """Pop the specified number of unread messages from the queue."""
+        if num_messages < 0:
+            num_messages = len(self.message_queue)
+        
+        # Get the messages to pop
+        messages = self.message_queue[:num_messages]
+        # Remove them from the queue
+        self.message_queue = self.message_queue[num_messages:]
+        # Add them to read mailbox
+        for msg in messages:
+            self._add_read_message(msg)
+        
+        return messages

@@ -1,4 +1,4 @@
-# CS 2620 Client-Server Chat System
+# CS 2620 Distributed Chat System
 
 This project is a simple client-server chat system. It implements replication using a leader-follower model.
 
@@ -31,7 +31,7 @@ python -m unittest discover chat_system/tests
 
 Our codebase is organized such that it has the following structure:
 
-# Chat System Project Structure
+# Distributed Chat System Project Structure
 
 ```
 chat_system/
@@ -71,5 +71,6 @@ chat_system/
    ├─ __init__.py
    ├─ test_protocol.py
    ├─ test_server.py
+   ├─ test_fault_tolerance.py
    └─ test_accountmanager.py
 ```
